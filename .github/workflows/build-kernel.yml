@@ -1,0 +1,135 @@
+# ==============================================================================
+# build-kernel.yml
+#
+# GitHub Actions workflow to build the msm8916 Samsung kernel for SM-T355Y.
+# Mirrors the environment implied by Makefile / build_kernel.sh /
+# build_msm8916_kernel.sh in this repo:
+#   - Linux 3.10.108 kernel, ARCH=arm
+#   - arm-eabi-4.8 cross toolchain (32-bit prebuilt gcc, needs multilib libs)
+#   - python2 required by old kbuild scripts
+#   - dtbTool (in tools/) to build dt.img from the compiled dtbs
+#
+# See the header comment in build_t355y.sh for the important caveat about
+# VARIANT_DEFCONFIG — this source tree ships no exact SM-T355Y (gt58lte_aus)
+# defconfig, so one is chosen manually below.
+# ==============================================================================
+name: Build SM-T355Y Kernel
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      variant_defconfig:
+        description: "VARIANT_DEFCONFIG to merge (arch/arm/configs/<name>)"
+        required: false
+        default: "msm8916_sec_gt58lte_tmo_defconfig"
+
+env:
+  ARCH: arm
+  KERNEL_DEFCONFIG: msm8916_sec_defconfig
+  VARIANT_DEFCONFIG: ${{ github.event.inputs.variant_defconfig || 'msm8916_sec_gt58lte_tmo_defconfig' }}
+  SELINUX_DEFCONFIG: selinux_defconfig
+  TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain/arm-eabi-4.8
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          path: kernel
+
+      # ------------------------------------------------------------------
+      # Host dependencies: 32-bit libs for the old prebuilt gcc binary,
+      # plus the classic kernel build toolchain (bc, flex, bison, python2).
+      # ------------------------------------------------------------------
+      - name: Install host build dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bc bison flex libssl-dev \
+            python2 \
+            lib32z1 lib32ncurses6 lib32stdc++6 libc6:i386 \
+            git-core u-boot-tools device-tree-compiler
+
+      - name: Verify python2 shim
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/kernel/bin"
+          ln -sf "$(command -v python2)" "$GITHUB_WORKSPACE/kernel/bin/python"
+          echo "$GITHUB_WORKSPACE/kernel/bin" >> "$GITHUB_PATH"
+
+      # ------------------------------------------------------------------
+      # Toolchain: arm-eabi-4.8, cached across runs by cache key on commit
+      # of the upstream toolchain repo (rarely changes).
+      # ------------------------------------------------------------------
+      - name: Cache arm-eabi-4.8 toolchain
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TOOLCHAIN_DIR }}
+          key: arm-eabi-4.8-toolchain-v3
+
+      - name: Fetch arm-eabi-4.8 toolchain (if missing/incomplete)
+        run: |
+          if [ -x "$TOOLCHAIN_DIR/bin/arm-eabi-gcc" ]; then
+            echo "Toolchain already present at $TOOLCHAIN_DIR (cache hit)"
+          else
+            echo "Toolchain missing or incomplete — cloning fresh copy"
+            rm -rf "$TOOLCHAIN_DIR"
+            # NOTE: the 'master' branch of this repo had its binaries deleted
+            # upstream (commit "Remove arm-eabi gcc-4.8 bins, libs, and
+            # includes"). The 'idea133' branch is the last ref that still has
+            # the actual prebuilt toolchain checked in — use that explicitly.
+            git clone --depth=1 --branch idea133 \
+              https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8 \
+              "$TOOLCHAIN_DIR"
+          fi
+
+      - name: Mark toolchain executable
+        run: chmod -R +x "$TOOLCHAIN_DIR/bin"
+
+      # ------------------------------------------------------------------
+      # Configure + build, equivalent to:
+      #   make O=out ARCH=arm CROSS_COMPILE=... \
+      #     msm8916_sec_defconfig VARIANT_DEFCONFIG=... SELINUX_DEFCONFIG=...
+      #   make O=out ARCH=arm CROSS_COMPILE=...
+      # ------------------------------------------------------------------
+      - name: Configure kernel
+        working-directory: kernel
+        run: |
+          make -C "$PWD" O=out ARCH=$ARCH \
+            CROSS_COMPILE="$TOOLCHAIN_DIR/bin/arm-eabi-" \
+            $KERNEL_DEFCONFIG \
+            VARIANT_DEFCONFIG=$VARIANT_DEFCONFIG \
+            SELINUX_DEFCONFIG=$SELINUX_DEFCONFIG
+
+      - name: Build kernel
+        working-directory: kernel
+        run: |
+          make -C "$PWD" O=out ARCH=$ARCH \
+            CROSS_COMPILE="$TOOLCHAIN_DIR/bin/arm-eabi-" \
+            -j"$(nproc)"
+
+      # ------------------------------------------------------------------
+      # Package: zImage + dt.img using the in-tree prebuilt dtbTool.
+      # ------------------------------------------------------------------
+      - name: Build dt.img
+        working-directory: kernel
+        run: |
+          chmod +x tools/dtbTool
+          mkdir -p dist
+          cp out/arch/arm/boot/Image dist/zImage || cp out/arch/arm/boot/zImage dist/zImage
+          ./tools/dtbTool -o dist/dt.img -s 2048 -p out/scripts/dtc/ out/arch/arm/boot/dts/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: SM-T355Y-kernel-${{ github.sha }}
+          path: |
+            kernel/dist/zImage
+            kernel/dist/dt.img
+          if-no-files-found: warn
