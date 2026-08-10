@@ -43,6 +43,54 @@ jobs:
           path: kernel
 
       # ------------------------------------------------------------------
+      # Fix sound/soundopt.mk: it hardcodes GCC flags
+      # (-fisolate-erroneous-paths-dereference, -mtune=cortex-a57.cortex-a53)
+      # that only exist on GCC 6+ / 5+ respectively, so it fails outright on
+      # the old arm-eabi-4.8 toolchain this device needs. Wrapping every
+      # flag in kbuild's cc-option macro makes the file safe on ANY GCC
+      # version — flags the active compiler doesn't support are silently
+      # dropped instead of erroring the build. Included by both
+      # sound/Makefile and drivers/misc/qcom/qdsp6v2/Makefile.
+      # ------------------------------------------------------------------
+      - name: Patch sound/soundopt.mk for GCC 4.8 compatibility
+        working-directory: kernel
+        run: |
+          cat > sound/soundopt.mk <<'EOF'
+
+          ccflags-y ?=
+          ccflags-y += -O1 \
+                    $(call cc-option,-fthread-jumps) \
+                    $(call cc-option,-falign-functions) \
+                    $(call cc-option,-falign-jumps) \
+                    $(call cc-option,-falign-loops) \
+                    $(call cc-option,-falign-labels) \
+                    $(call cc-option,-fcrossjumping) \
+                    $(call cc-option,-fcse-follow-jumps) \
+                    $(call cc-option,-fcse-skip-blocks) \
+                    $(call cc-option,-fexpensive-optimizations) \
+                    $(call cc-option,-fgcse) \
+                    $(call cc-option,-fgcse-lm) \
+                    $(call cc-option,-fhoist-adjacent-loads) \
+                    $(call cc-option,-finline-small-functions) \
+                    $(call cc-option,-findirect-inlining) \
+                    $(call cc-option,-fipa-cp) \
+                    $(call cc-option,-fipa-sra) \
+                    $(call cc-option,-fisolate-erroneous-paths-dereference) \
+                    $(call cc-option,-foptimize-sibling-calls) \
+                    $(call cc-option,-foptimize-strlen) \
+                    $(call cc-option,-fpeephole2) \
+                    $(call cc-option,-frerun-cse-after-loop) \
+                    $(call cc-option,-fstrict-aliasing) \
+                    $(call cc-option,-ftree-switch-conversion) \
+                    $(call cc-option,-ftree-tail-merge) \
+                    $(call cc-option,-ftree-pre) \
+                    $(call cc-option,-ftree-vrp) \
+                    $(call cc-option,-mtune=cortex-a57.cortex-a53)
+          EOF
+          echo "Patched sound/soundopt.mk:"
+          cat sound/soundopt.mk
+
+      # ------------------------------------------------------------------
       # Host dependencies: 32-bit libs for the old prebuilt gcc binary,
       # plus the classic kernel build toolchain (bc, flex, bison, python2).
       # ------------------------------------------------------------------
