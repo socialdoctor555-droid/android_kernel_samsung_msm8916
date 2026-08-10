@@ -1,4 +1,4 @@
-name: O2
+name: Build-gt58
 on:
   workflow_dispatch:
 jobs:
