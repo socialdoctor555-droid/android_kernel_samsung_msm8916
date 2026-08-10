@@ -48,7 +48,7 @@ jobs:
     - name: Setup Cache (ccache)
       uses: actions/cache@v5
       with:
-        path: ~/.cache/ccache_mikernel
+        path: ~/.cache/ccache_gt58
         key: kernel-ccache-gt58-build-gt58.sh-${{ github.run_id }}
         restore-keys: |
           kernel-ccache-gt58-build-gt58.sh-
