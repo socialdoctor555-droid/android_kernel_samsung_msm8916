@@ -1,0 +1,151 @@
+# ==============================================================================
+# build-gt58.yml
+#
+# GitHub Actions workflow for Samsung SM-T355Y (msm8916, gt58lte).
+#
+# This is test.yml's structure (disk cleanup, ccache, susfs-patch-reject
+# upload) with the device-specific bits swapped for the values from
+# core.yml, which is the workflow that has actually built this kernel:
+#   - ARCH=arm (not arm64), arm-eabi-4.8 gcc (not Neutron Clang)
+#   - msm8916_sec_defconfig + VARIANT_DEFCONFIG + SELINUX_DEFCONFIG
+#     (not vendor/umi_defconfig, which is a different device)
+#   - python2 shim required by the old kbuild scripts
+#   - dts backup path corrected to arch/arm/boot/dts (arm32), matching the
+#     kernel this workflow actually builds — test.yml's own dts_source was
+#     already arm32 while its MAKE_ARGS were arm64, so this was inconsistent
+#     even before any of these changes.
+#
+# See build-gt58.sh header for the dtbo.img caveat (likely doesn't exist on
+# this kernel generation) and the VARIANT_DEFCONFIG caveat (no exact
+# SM-T355Y/gt58lte_aus defconfig ships in this source; override via
+# workflow_dispatch input if you obtain the correct one).
+# ==============================================================================
+name: Build-gt58
+on:
+  workflow_dispatch:
+    inputs:
+      variant_defconfig:
+        description: "VARIANT_DEFCONFIG to merge (arch/arm/configs/<name>)"
+        required: false
+        default: "msm8916_sec_gt58lte_tmo_defconfig"
+
+env:
+  ARCH: arm
+  KERNEL_DEFCONFIG: msm8916_sec_defconfig
+  VARIANT_DEFCONFIG: ${{ github.event.inputs.variant_defconfig || 'msm8916_sec_gt58lte_tmo_defconfig' }}
+  SELINUX_DEFCONFIG: selinux_defconfig
+  TOOLCHAIN_DIR: ${{ github.workspace }}/toolchain/arm-eabi-4.8
+
+jobs:
+  build:
+    name: Build Kernel for Samsung Tab A 2015 (SM-T355Y)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Source
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - name: Cleanup Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+    - name: Install Dependencies
+      run: |
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential git curl wget bison flex zip bc cpio libssl-dev ccache \
+          python2 lib32z1 lib32ncurses6 lib32stdc++6 libc6:i386 device-tree-compiler
+
+    - name: Verify python2 shim
+      run: |
+        mkdir -p "$GITHUB_WORKSPACE/bin"
+        ln -sf "$(command -v python2)" "$GITHUB_WORKSPACE/bin/python"
+        echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
+
+    - name: Setup Cache (ccache)
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/ccache_mikernel
+        key: kernel-ccache-gt58-build-gt58.sh-${{ github.run_id }}
+        restore-keys: |
+          kernel-ccache-gt58-build-gt58.sh-
+          kernel-ccache-gt58-
+          kernel-ccache-
+
+    # ------------------------------------------------------------------
+    # Toolchain: arm-eabi-4.8, cached across runs (rarely changes).
+    # 'master' branch of this repo had its binaries deleted upstream;
+    # 'idea133' is the last ref that still has them checked in.
+    # ------------------------------------------------------------------
+    - name: Cache arm-eabi-4.8 toolchain
+      id: toolchain-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.TOOLCHAIN_DIR }}
+        key: arm-eabi-4.8-toolchain-v3
+
+    - name: Fetch arm-eabi-4.8 toolchain (if missing/incomplete)
+      run: |
+        if [ -x "$TOOLCHAIN_DIR/bin/arm-eabi-gcc" ]; then
+          echo "Toolchain already present at $TOOLCHAIN_DIR (cache hit)"
+        else
+          echo "Toolchain missing or incomplete — cloning fresh copy"
+          rm -rf "$TOOLCHAIN_DIR"
+          git clone --depth=1 --branch idea133 \
+            https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8 \
+            "$TOOLCHAIN_DIR"
+        fi
+        chmod -R +x "$TOOLCHAIN_DIR/bin"
+
+    - name: Backup dts
+      run: |
+        echo "Backing up dts for build-gt58.sh to restore later....."
+        dts_source=arch/arm/boot/dts
+        cp -a "${dts_source}" .dts.bak
+
+    - name: Config Preparation
+      run: |
+         # NOTE: these values must match the defaults in build-gt58.sh.
+         export PATH="$TOOLCHAIN_DIR/bin:/usr/lib/ccache:$PATH"
+         export CCACHE_DIR="$HOME/.cache/ccache_mikernel"
+         export CCACHE_COMPILERCHECK=content
+         export CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime
+
+         MAKE_ARGS="ARCH=$ARCH \
+           O=out \
+           CROSS_COMPILE=$TOOLCHAIN_DIR/bin/arm-eabi-"
+
+         echo "CCACHE_DIR: [$CCACHE_DIR]"
+         echo "KERNEL_DEFCONFIG: [$KERNEL_DEFCONFIG]"
+         echo "VARIANT_DEFCONFIG: [$VARIANT_DEFCONFIG]"
+
+         echo "......Generating base + variant + selinux defconfig......."
+         make $MAKE_ARGS "$KERNEL_DEFCONFIG" \
+           VARIANT_DEFCONFIG="$VARIANT_DEFCONFIG" \
+           SELINUX_DEFCONFIG="$SELINUX_DEFCONFIG"
+
+    - name: Build Kernel
+      run: |
+        chmod +x build-gt58.sh
+        echo "Using build-gt58.sh....."
+        bash build-gt58.sh
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v6
+      with:
+        name: SM-T355Y-Kernel_v1
+        path: ./*.zip
+        if-no-files-found: error
+
+    - name: Upload Patch Rejects (debug)
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: susfs-patch-rejects
+        path: "**/*.rej"
+        if-no-files-found: ignore
