@@ -1,25 +1,3 @@
-# ==============================================================================
-# build-gt58.yml
-#
-# GitHub Actions workflow for Samsung SM-T355Y (msm8916, gt58lte).
-#
-# This is test.yml's structure (disk cleanup, ccache, susfs-patch-reject
-# upload) with the device-specific bits swapped for the values from
-# core.yml, which is the workflow that has actually built this kernel:
-#   - ARCH=arm (not arm64), arm-eabi-4.8 gcc (not Neutron Clang)
-#   - msm8916_sec_defconfig + VARIANT_DEFCONFIG + SELINUX_DEFCONFIG
-#     (not vendor/umi_defconfig, which is a different device)
-#   - python2 shim required by the old kbuild scripts
-#   - dts backup path corrected to arch/arm/boot/dts (arm32), matching the
-#     kernel this workflow actually builds — test.yml's own dts_source was
-#     already arm32 while its MAKE_ARGS were arm64, so this was inconsistent
-#     even before any of these changes.
-#
-# See build-gt58.sh header for the dtbo.img caveat (likely doesn't exist on
-# this kernel generation) and the VARIANT_DEFCONFIG caveat (no exact
-# SM-T355Y/gt58lte_aus defconfig ships in this source; override via
-# workflow_dispatch input if you obtain the correct one).
-# ==============================================================================
 name: Build-gt58
 on:
   workflow_dispatch:
@@ -101,7 +79,12 @@ jobs:
             "$TOOLCHAIN_DIR"
         fi
         chmod -R +x "$TOOLCHAIN_DIR/bin"
-
+    - name: Anykernel
+      run: |
+          echo "Clone AnyKernel3 for packing kernel (repo: https://github.com/AstideLabs/AnyKernel3)"
+          git clone https://github.com/socialdoctor555-droid/AnyKernel3 -b V1 --single-branch --depth=1 anykernel
+          echo ".......Anykernel sources cloned....."
+  
     - name: Backup dts
       run: |
         echo "Backing up dts for build-gt58.sh to restore later....."
