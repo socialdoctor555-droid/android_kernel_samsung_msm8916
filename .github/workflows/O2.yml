@@ -44,7 +44,7 @@ jobs:
     - name: Cloning the necessary resources
       run: | 
           echo "Building for MIUI Display configuration....."
-          dts_source=arch/arm64/boot/dts/vendor/qcom
+          dts_source=arch/arm/boot/dts/vendor/qcom
           cp -a ${dts_source} .dts.bak
 
     - name: Config Preparation
