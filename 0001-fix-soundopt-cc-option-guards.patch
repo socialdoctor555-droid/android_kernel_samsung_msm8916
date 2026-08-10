@@ -1,0 +1,59 @@
+diff --git a/sound/soundopt.mk b/sound/soundopt.mk
+index 60a8377..ffacfc0 100644
+--- a/sound/soundopt.mk
++++ b/sound/soundopt.mk
+@@ -1,24 +1,30 @@
+ 
+ ccflags-y ?=
+-ccflags-y += -O1 -fthread-jumps \
+-          -falign-functions -falign-jumps \
+-          -falign-loops -falign-labels \
+-          -fcrossjumping \
+-          -fcse-follow-jumps -fcse-skip-blocks \
+-          -fexpensive-optimizations \
+-          -fgcse -fgcse-lm \
+-          -fhoist-adjacent-loads \
+-          -finline-small-functions \
+-          -findirect-inlining \
+-          -fipa-cp \
+-          -fipa-sra \
+-          -fisolate-erroneous-paths-dereference \
+-          -foptimize-sibling-calls \
+-          -foptimize-strlen \
+-          -fpeephole2 \
+-          -frerun-cse-after-loop \
+-          -fstrict-aliasing \
+-          -ftree-switch-conversion -ftree-tail-merge \
+-          -ftree-pre \
+-          -ftree-vrp \
+-          -mtune=cortex-a57.cortex-a53
+\ No newline at end of file
++ccflags-y += -O1 \
++          $(call cc-option,-fthread-jumps) \
++          $(call cc-option,-falign-functions) \
++          $(call cc-option,-falign-jumps) \
++          $(call cc-option,-falign-loops) \
++          $(call cc-option,-falign-labels) \
++          $(call cc-option,-fcrossjumping) \
++          $(call cc-option,-fcse-follow-jumps) \
++          $(call cc-option,-fcse-skip-blocks) \
++          $(call cc-option,-fexpensive-optimizations) \
++          $(call cc-option,-fgcse) \
++          $(call cc-option,-fgcse-lm) \
++          $(call cc-option,-fhoist-adjacent-loads) \
++          $(call cc-option,-finline-small-functions) \
++          $(call cc-option,-findirect-inlining) \
++          $(call cc-option,-fipa-cp) \
++          $(call cc-option,-fipa-sra) \
++          $(call cc-option,-fisolate-erroneous-paths-dereference) \
++          $(call cc-option,-foptimize-sibling-calls) \
++          $(call cc-option,-foptimize-strlen) \
++          $(call cc-option,-fpeephole2) \
++          $(call cc-option,-frerun-cse-after-loop) \
++          $(call cc-option,-fstrict-aliasing) \
++          $(call cc-option,-ftree-switch-conversion) \
++          $(call cc-option,-ftree-tail-merge) \
++          $(call cc-option,-ftree-pre) \
++          $(call cc-option,-ftree-vrp) \
++          $(call cc-option,-mtune=cortex-a57.cortex-a53)
+\ No newline at end of file
