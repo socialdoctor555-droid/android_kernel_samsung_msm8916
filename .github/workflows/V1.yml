@@ -1,0 +1,58 @@
+name: Build Samsung MSM8916 Kernel
+
+on:
+  workflow_dispatch: # Allows manual trigger from the Actions tab
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-20.04 # Older Ubuntu is better for compiling legacy 3.10 kernels
+
+    steps:
+      - name: Set up Directory Structure
+        # The script expects the kernel to be nested so it can use ../.. for the root workspace
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/android/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
+          mkdir -p $GITHUB_WORKSPACE/kernel_workspace/kernel
+
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v4
+        with:
+          path: kernel_workspace/kernel
+
+      - name: Install Build Dependencies
+        # python2.7 is explicitly required by the script's symlink generation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex gcc-multilib g++-multilib \
+          lib32ncurses5-dev lib32z1-dev libncurses5-dev libssl-dev lzop python2.7 \
+          zip zlib1g-dev ccache curl rsync schedtool
+
+      - name: Download AOSP arm-eabi-4.8 Toolchain
+        # Grabs the specific toolchain required by README_Kernel.txt and places it in the script's expected path
+        run: |
+          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8 --depth=1 $GITHUB_WORKSPACE/android/prebuilts/gcc/linux-x86/arm/arm-eabi-4.8
+
+      - name: Execute Build Script
+        working-directory: ${{ github.workspace }}/kernel_workspace/kernel
+        # Using gt58lte_aus sets PRODUCT_NAME=gt58ltedo for the SM-T355Y profile
+        run: |
+          chmod +x build_msm8916_kernel.sh
+          ./build_msm8916_kernel.sh gt58lte_aus
+
+      - name: Upload zImage Artifact
+        uses: actions/upload-artifact@v4
+        # The script outputs the compiled objects into an android/out/... tree
+        with:
+          name: Kernel-zImage-SM-T355Y
+          path: ${{ github.workspace }}/android/out/target/product/gt58ltedo/obj/KERNEL_OBJ/arch/arm/boot/zImage
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-Log
+          path: ${{ github.workspace }}/kernel_workspace/kernel/build.log
