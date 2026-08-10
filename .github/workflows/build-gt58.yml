@@ -39,7 +39,7 @@ env:
 jobs:
   build:
     name: Build Kernel for Samsung Tab A 2015 (SM-T355Y)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout Source
       uses: actions/checkout@v6
@@ -59,12 +59,12 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           build-essential git curl wget bison flex zip bc cpio libssl-dev ccache \
-          python2 lib32z1 lib32ncurses6 lib32stdc++6 libc6:i386 device-tree-compiler
+          python2.7 lib32z1 lib32ncurses6 lib32stdc++6 libc6:i386 device-tree-compiler
 
     - name: Verify python2 shim
       run: |
         mkdir -p "$GITHUB_WORKSPACE/bin"
-        ln -sf "$(command -v python2)" "$GITHUB_WORKSPACE/bin/python"
+        ln -sf "$(command -v python2.7)" "$GITHUB_WORKSPACE/bin/python"
         echo "$GITHUB_WORKSPACE/bin" >> "$GITHUB_PATH"
 
     - name: Setup Cache (ccache)
